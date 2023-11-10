@@ -9,8 +9,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.utils.data.dataloader import default_collate
 import transformers
-from transformers import AutoConfig, AutoModelWithLMHead, AutoTokenizer
+from transformers import AutoConfig, AutoModelWithLMHead, AutoTokenizer,AutoModelForCausalLM,LlamaForCausalLM,LlamaTokenizer,GPT2Tokenizer
 from tqdm import tqdm
 
 import autoprompt.utils as utils
@@ -49,8 +50,9 @@ class PredictWrapper:
         trigger_mask = model_inputs.pop('trigger_mask')
         predict_mask = model_inputs.pop('predict_mask')
         model_inputs = replace_trigger_tokens(model_inputs, trigger_ids, trigger_mask)
-        logits, *_ = self._model(**model_inputs)
+        logits = self._model(**model_inputs).logits
         predict_logits = logits.masked_select(predict_mask.unsqueeze(-1)).view(logits.size(0), -1)
+        #predict_logits = logits.masked_select(predict_mask.unsqueeze(-1)).view(logits.size(0), -1)
         return predict_logits
 
 
@@ -109,9 +111,10 @@ def load_pretrained(model_name):
     initialization steps to facilitate working with triggers.
     """
     config = AutoConfig.from_pretrained(model_name)
-    model = AutoModelWithLMHead.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
     model.eval()
-    tokenizer = AutoTokenizer.from_pretrained(model_name, add_prefix_space=True)
+    tokenizer = GPT2Tokenizer.from_pretrained(model_name,add_prefix_space=True,use_auth_token = True)
+    # tokenizer = AutoTokenizer.from_pretrained(model_name, add_prefix_space=True,use_auth_token = True)
     utils.add_task_specific_tokens(tokenizer)
     return config, model, tokenizer
 
@@ -126,8 +129,9 @@ def set_seed(seed: int):
 
 def get_embeddings(model, config):
     """Returns the wordpiece embedding module."""
-    base_model = getattr(model, config.model_type)
-    embeddings = base_model.embeddings.word_embeddings
+    #base_model = getattr(model,config.name)
+    # embeddings = model.embeddings.word_embeddings
+    embeddings = model.get_input_embeddings() # J
     return embeddings
 
 
@@ -228,7 +232,15 @@ def run_model(args):
         logger.debug(f'Trigger ids: {trigger_ids}')
         assert len(trigger_ids) == templatizer.num_trigger_tokens
     else:
-        trigger_ids = [tokenizer.mask_token_id] * templatizer.num_trigger_tokens
+        initial_trigger = ["This", "is", "an", "example"]
+        trigger_ids = tokenizer.convert_tokens_to_ids(initial_trigger)
+        logger.debug(f'Initial trigger: {args.initial_trigger}')
+        logger.debug(f'Trigger ids: {trigger_ids}')
+        assert len(trigger_ids) == templatizer.num_trigger_tokens
+        # trigger_ids = [tokenizer.mask_token_id] * templatizer.num_trigger_tokens
+        # trigger_ids = [0] * templatizer.num_trigger_tokens
+    # print("tok",tokenizer.mask_token_id)
+    # print("temp",templatizer.num_trigger_tokens)
     trigger_ids = torch.tensor(trigger_ids, device=device).unsqueeze(0)
     best_trigger_ids = trigger_ids.clone()
 
@@ -241,13 +253,13 @@ def run_model(args):
         evaluation_fn = lambda x, y: -get_loss(x, y)
 
     logger.info('Loading datasets')
-    collator = utils.Collator(pad_token_id=tokenizer.pad_token_id)
+    collator = utils.Collator_Llama()
 
     if args.perturbed:
         train_dataset = utils.load_augmented_trigger_dataset(args.train, templatizer, limit=args.limit)
     else:
         train_dataset = utils.load_trigger_dataset(args.train, templatizer, use_ctx=args.use_ctx, limit=args.limit)
-    train_loader = DataLoader(train_dataset, batch_size=args.bsz, shuffle=True, collate_fn=collator)
+    train_loader = DataLoader(train_dataset, batch_size=args.bsz, shuffle=True, collate_fn = collator)
 
     if args.perturbed:
         dev_dataset = utils.load_augmented_trigger_dataset(args.dev, templatizer)
@@ -319,7 +331,7 @@ def run_model(args):
                     'Effective batch size will be smaller than specified.'
                 )
                 break
-            model_inputs = {k: v.to(device) for k, v in model_inputs.items()}
+            model_inputs = {k: v.to(device) for k,v in model_inputs.items()}
             labels = labels.to(device)
             predict_logits = predictor(model_inputs, trigger_ids)
             loss = get_loss(predict_logits, labels).mean()
