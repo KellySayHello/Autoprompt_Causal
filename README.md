@@ -1,5 +1,6 @@
 # Generate Prompt
 ### NLI
+the example below shows how to generate prompt with Llama2-7b. If you are using other CLM, please change the ```template``` and the ```model-name```.
 ```
 python -m autoprompt.create_trigger --train ./data/SICK-E-balanced/3-balance/SICK_TRAIN_ALL_S.tsv --dev data/SICK-E-balanced/3-balance/SICK_DEV_ALL_S.tsv --template '<s>[INST] <<SYS>>\n You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature. \n [T] [T] [T] [T] {sentence_A} {sentence_B} [/INST]' --label-map '{"ENTAILMENT": ["\u0120Taiwan", "\u0120Ara", "abet"], "CONTRADICTION": ["\u0120Only", "\u0120Didn", "\u0120BUT"], "NEUTRAL": ["icy", "oder", "agna"]}' --bsz 60 --model-name meta-llama/Llama-2-7b-hf
 ```
