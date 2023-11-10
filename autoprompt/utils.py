@@ -79,7 +79,29 @@ class Collator:
             padded_inputs[key] = padded
         labels = pad_squeeze_sequence(labels, batch_first=True, padding_value=0)
         return padded_inputs, labels
+    
 
+class Collator_Llama:   
+    def __init__(self):
+        pass
+    def __call__(self, features):
+        # Separate the list of inputs and labels
+        model_inputs, labels = list(zip(*features))
+        # Assume that all inputs have the same keys as the first
+        proto_input = model_inputs[0]
+        keys = list(proto_input.keys())
+        padded_inputs = {}
+        for key in keys:
+            if key == 'input_ids':
+                padding_value = 0
+            else:
+                padding_value = 0
+            # NOTE: We need to squeeze to get rid of fake batch dim.
+            sequence = [x[key] for x in model_inputs]
+            padded = pad_squeeze_sequence(sequence, batch_first=True, padding_value=padding_value)
+            padded_inputs[key] = padded
+        labels = pad_squeeze_sequence(labels, batch_first=True, padding_value=0)
+        return padded_inputs, labels
 
 def encode_label(tokenizer, label, tokenize=False):
     """
@@ -169,7 +191,8 @@ class TriggerTemplatizer:
         input_ids = model_inputs['input_ids']
         trigger_mask = input_ids.eq(self._tokenizer.trigger_token_id)
         predict_mask = input_ids.eq(self._tokenizer.predict_token_id)
-        input_ids[predict_mask] = self._tokenizer.mask_token_id
+        #input_ids[predict_mask] = self._tokenizer.mask_token_id
+        input_ids[predict_mask] = 0
 
         model_inputs['trigger_mask'] = trigger_mask
         model_inputs['predict_mask'] = predict_mask
@@ -201,8 +224,8 @@ def add_task_specific_tokens(tokenizer):
     tokenizer.predict_token = '[P]'
     tokenizer.predict_token_id = tokenizer.convert_tokens_to_ids('[P]')
     # NOTE: BERT and RoBERTa tokenizers work properly if [X] is not a special token...
-    # tokenizer.lama_x = '[X]'
-    # tokenizer.lama_x_id = tokenizer.convert_tokens_to_ids('[X]')
+    #tokenizer.lama_x = '[X]'
+    #tokenizer.lama_x_id = tokenizer.convert_tokens_to_ids('[X]')
     tokenizer.lama_y = '[Y]'
     tokenizer.lama_x_id = tokenizer.convert_tokens_to_ids('[Y]')
 
