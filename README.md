@@ -7,7 +7,7 @@ python -m autoprompt.create_trigger --train ./data/SICK-E-balanced/3-balance/SIC
 
 the example below shows how to generate prompt with GPT-2. If you are using other CLM, please change the ```template``` and the ```model-name```.
 ```
-python -m autoprompt.create_trigger --train ./data/SICK-E-balanced/3-balance/SICK_TRAIN_ALL_S.tsv --dev data/SICK-E-balanced/3-balance/SICK_DEV_ALL_S.tsv --template '<|startoftext|> [T] [T] [T] [T] [P] <|endoftext|>' --label-map '{"ENTAILMENT": ["\u0120Taiwan", "\u0120Ara", "abet"], "CONTRADICTION": ["\u0120Only", "\u0120Didn", "\u0120BUT"], "NEUTRAL": ["icy", "oder", "agna"]}' --bsz 60 --model-name gpt2
+python -m autoprompt.create_trigger --train ./data/SICK-E-balanced/3-balance/SICK_TRAIN_ALL_S.tsv --dev data/SICK-E-balanced/3-balance/SICK_DEV_ALL_S.tsv --template '<|startoftext|> {sentence_A} [T] [T] [T] [T] [P] {sentence_B} <|endoftext|>' --label-map '{"ENTAILMENT": ["\u0120Taiwan", "\u0120Ara", "abet"], "CONTRADICTION": ["\u0120Only", "\u0120Didn", "\u0120BUT"], "NEUTRAL": ["icy", "oder", "agna"]}' --bsz 60 --model-name gpt2 
 ```
 
 # AutoPrompt
