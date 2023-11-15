@@ -8,6 +8,7 @@ import random
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch.nn import DataParallel
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 import transformers
@@ -111,9 +112,9 @@ def load_pretrained(model_name):
     initialization steps to facilitate working with triggers.
     """
     config = AutoConfig.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
     model.eval()
-    tokenizer = GPT2Tokenizer.from_pretrained(model_name,add_prefix_space=True,use_auth_token = True)
+    tokenizer = LlamaTokenizer.from_pretrained(model_name,add_prefix_space=True,use_auth_token = True)
     # tokenizer = AutoTokenizer.from_pretrained(model_name, add_prefix_space=True,use_auth_token = True)
     utils.add_task_specific_tokens(tokenizer)
     return config, model, tokenizer
@@ -184,7 +185,7 @@ def isupper(idx, tokenizer):
     # We only want to check tokens that begin words. Since byte-pair encoding
     # captures a prefix space, we need to check that the decoded token begins
     # with a space, and has a capitalized second character.
-    if isinstance(tokenizer, transformers.GPT2Tokenizer):
+    if isinstance(tokenizer, transformers.LlamaTokenizer):
         decoded = tokenizer.decode([idx])
         if decoded[0] == ' ' and decoded[1].isupper():
             _isupper = True
@@ -232,12 +233,12 @@ def run_model(args):
         logger.debug(f'Trigger ids: {trigger_ids}')
         assert len(trigger_ids) == templatizer.num_trigger_tokens
     else:
-        initial_trigger = ["This", "is", "an", "example"]
+        initial_trigger = ["the","the","the","the"]
         trigger_ids = tokenizer.convert_tokens_to_ids(initial_trigger)
         logger.debug(f'Initial trigger: {args.initial_trigger}')
         logger.debug(f'Trigger ids: {trigger_ids}')
         assert len(trigger_ids) == templatizer.num_trigger_tokens
-        # trigger_ids = [tokenizer.mask_token_id] * templatizer.num_trigger_tokens
+        # trigger_ids = [tokenizer.mask_token_id] *templatizer.num_trigger_tokens
         # trigger_ids = [0] * templatizer.num_trigger_tokens
     # print("tok",tokenizer.mask_token_id)
     # print("temp",templatizer.num_trigger_tokens)
@@ -292,6 +293,8 @@ def run_model(args):
                 filter[idx] = -1e32
 
     logger.info('Evaluating')
+    print(torch.cuda.is_available())
+    print(torch.cuda.device_count())
     numerator = 0
     denominator = 0
     for model_inputs, labels in tqdm(dev_loader):
@@ -389,7 +392,7 @@ def run_model(args):
                 # if candidate.item() in filter_candidates:
                 #     candidate_scores[i] = -1e32
                 #     continue
-
+                #print("candidate_i = ",tokenizer.decode(candidates))
                 temp_trigger = trigger_ids.clone()
                 temp_trigger[:, token_to_flip] = candidate
                 with torch.no_grad():
@@ -397,13 +400,15 @@ def run_model(args):
                     eval_metric = evaluation_fn(predict_logits, labels)
 
                 candidate_scores[i] += eval_metric.sum()
-
+        print("candidate_i = ",tokenizer.decode(candidates))
+        print("candidate_score = ", candidate_scores)
         # TODO: Something cleaner. LAMA templates can't have mask tokens, so if
         # there are still mask tokens in the trigger then set the current score
         # to -inf.
         if args.print_lama:
             if trigger_ids.eq(tokenizer.mask_token_id).any():
                 current_score = float('-inf')
+            print("current_score = ",current_score)
 
         if (candidate_scores > current_score).any():
             logger.info('Better trigger detected.')
